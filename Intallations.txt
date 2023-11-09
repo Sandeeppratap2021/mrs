@@ -1,0 +1,24 @@
+* https://www.python.org/downloads/
+
+Set Environment variable path
+
+* python get-pip.py                    //for installing pip
+
+Go to System and Security > System in the Control Panel once it has been opened.
+On the left side, click the Advanced system settings link.
+Then select Environment Variables.
+Double-click the PATH variable under System Variables.
+Click New, and add the directory where pip is installed, e.g. C:Python33Scripts, and select OK.
+
+ ......................... AFTER PYTHON AND PIP SETUP........................................
+
+*pip install streamlit
+*pip install requests
+*pip install streamlit_authenticator==0.1.5
+*pip install pandas
+*pip install pickle
+
+
+Run -> python generate_keys.py
+Run -> python -m streamlit run app.py
+
