@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 import pickle
 import requests
 from pathlib import Path
@@ -34,27 +35,48 @@ if authentication_status:
         full_path = "https://image.tmdb.org/t/p/w500/"+poster_path
         return full_path
 
+    def fetch_trailer(movie_id):
+        # Construct the URL to fetch movie details
+        url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key=4dcaab1bf38b4ba42fd052fa044d92b8&append_to_response=videos"
+        
+        # Make the API request
+        response = requests.get(url)
+        data = response.json()
+
+        # Check if the 'videos' key is present in the response
+        if 'videos' in data and 'results' in data['videos']:
+            videos = data['videos']['results']
+            
+            # Search for a trailer among the videos
+            for video in videos:
+                # Assuming trailers are of type 'Trailer' and hosted on YouTube
+                if video['type'] == 'Trailer' and 'YouTube' in video['site']:
+                    # Construct the YouTube trailer URL
+                    trailer_key = video['key']
+                    trailer_url = f"https://www.youtube.com/watch?v={trailer_key}"
+                    return trailer_url
+
+        # Return None if no trailer is found
+        return None
+
     movies = pickle.load(open("movies_list.pkl", 'rb'))
     similarity = pickle.load(open("similarity.pkl", 'rb'))
     movies_list=movies['title'].values
 
     # logout
-
     authenticator.logout("Logout", "sidebar")
     st.sidebar.title(f"Welcome {name}")
-    # st.set_page_config(page_title=f"Welcome {name}")
 
     st.title("Movie Recommender System")
-
-    # import streamlit.components.v1 as components
-
     selectvalue=st.selectbox("Select movie from dropdown", movies_list)
 
     def recommend(movie):
         index=movies[movies['title']==movie].index[0]
         distance = sorted(list(enumerate(similarity[index])), reverse=True, key=lambda vector:vector[1])
         recommend_movie=[]
+        similarity_score=[]
         recommend_poster=[]
+        recommend_trailer=[]
         recommend_genres=[]
         recommend_tagline=[]
         recommend_overview=[]
@@ -64,37 +86,33 @@ if authentication_status:
         for i in distance[1:6]:
             movies_id=movies.iloc[i[0]].id
             recommend_movie.append(movies.iloc[i[0]].title)
+            similarity_score.append(i[1])
             recommend_poster.append(fetch_poster(movies_id))
+            recommend_trailer.append(fetch_trailer(movies_id))
             recommend_genres.append(movies.iloc[i[0]].genres)
             recommend_tagline.append(movies.iloc[i[0]].tagline)
             recommend_overview.append(movies.iloc[i[0]].overview)
             recommend_cast.append(movies.iloc[i[0]].cast)
             recommend_director.append(movies.iloc[i[0]].director)
 
-        return recommend_movie, recommend_poster, recommend_genres, recommend_tagline, recommend_overview, recommend_cast, recommend_director
+        return recommend_movie, similarity_score, recommend_poster, recommend_trailer, recommend_genres, recommend_tagline, recommend_overview, recommend_cast, recommend_director
 
-
+    # # Initialize session state
+    # if 'search_history' not in st.session_state:
+    #     st.session_state.search_history = []
 
     if st.button("Show Recommendation"):
-        movie_name, movie_poster, movie_genres, movie_tagline, movie_overview, movie_cast, movie_director = recommend(selectvalue)
-        col1,col2,col3,col4,col5=st.columns(5)
+        movie_name, movie_similarity, movie_poster, movie_trailer, movie_genres, movie_tagline, movie_overview, movie_cast, movie_director = recommend(selectvalue)
+        cols=st.columns(5)
 
-        for i in range(5):
-            if i == 0:
-                col = col1
-            elif i == 1:
-                col = col2
-            elif i == 2:
-                col = col3
-            elif i == 3:
-                col = col4
-            else:
-                col = col5
+        for i, col in enumerate(cols):
 
             with col:    
                 st.markdown(f"**{movie_name[i]}**")
                 st.image(movie_poster[i], use_column_width=True)
-                
+                st.markdown(f"**Similarity-score:** {movie_similarity[i]:.5f}")
+                st.video(movie_trailer[i])
+
                 with st.expander(f"Movie Description"):
                     st.markdown("**Tagline:** "+f"{movie_tagline[i]}")
                     st.markdown("**Genres:** "+f"{movie_genres[i]}")
@@ -102,25 +120,46 @@ if authentication_status:
                     st.markdown("**Cast:** "+f"{movie_cast[i]}")
                     st.markdown("**Director:** "+f"{movie_director[i]}")
 
-    # Display 5 popular movies on the home screen in one row with 5 columns
-    st.header("Popular Movies")
-    popular_movies = movies.sort_values(by='popularity', ascending=False).head(5)
-    col1, col2, col3, col4, col5 = st.columns(5)
+        # if st.session_state.search_history and selectvalue not in st.session_state.search_history:
+        #     st.session_state.search_history.append(selectvalue)
+        # elif not st.session_state.search_history:
+        #     st.session_state.search_history.append(selectvalue)
 
-    for i, movie in popular_movies.iterrows():
-        movie_name = movie['title']
-        movie_poster = fetch_poster(movie['id'])
-        
-        with col1 if i % 5 == 0 else col2 if i % 5 == 1 else col3 if i % 5 == 2 else col4 if i % 5 == 3 else col5:
-            st.markdown(f"**{movie_name}**")
-            st.image(movie_poster, use_column_width=True)
-            
-            with st.expander(f"Movie Description"):
-                st.markdown("**Tagline:** "+f"{movie['tagline']}")
-                st.markdown("**Genres:** "+f"{movie['genres']}")
-                st.markdown("**Overview:** "+f"{movie['overview']}")
-                st.markdown("**Cast:** "+f"{movie['cast']}")
-                st.markdown("**Director:** "+f"{movie['director']}")
+    # # Display search history
+    # st.sidebar.title("Search History")
+    # for search in st.session_state.search_history[-5:][::-1]:  # Display the last 5 searches in reverse order
+    #     st.sidebar.write(search)
+
+    # # Display 5 popular movies on the home screen in one row with 5 columns
+    # st.header("Popular Movies")
+    # popular_movies = movies.dropna(subset=['genres']).sort_values(by='popularity', ascending=False).head(5)
+    # cols= st.columns(5)
+
+    # for i, col in enumerate(cols):
+
+    #     if i < len(popular_movies):
+
+    #         movie = popular_movies.iloc[i]  # Access the row of the DataFrame
+
+    #         movie_name = movie['title']
+    #         movie_poster = fetch_poster(movie['id'])
+    #         popularity = movie['popularity']
+    #         movie_trailer = fetch_trailer(movie['id'])
+
+
+    #         with col:    
+    #             st.markdown(f"**{movie_name}**")
+    #             st.image(movie_poster, use_column_width=True)
+    #             st.markdown(f"**Popularity:** {popularity:.2f}")
+    #             # st.markdown(f"**Similarity-score:** {movie_similarity:.5f}")
+    #             st.video(movie_trailer)
+
+    #             with st.expander(f"Movie Description"):
+    #                 st.markdown("**Tagline:** "+f"{movie['tagline']}")
+    #                 st.markdown("**Genres:** "+f"{movie['genres']}")
+    #                 st.markdown("**Overview:** "+f"{movie['overview']}")
+    #                 st.markdown("**Cast:** "+f"{movie['cast']}")
+    #                 st.markdown("**Director:** "+f"{movie['director']}")
 
 
     # Create a dictionary where keys are genres and values are lists of movie titles in that genre
@@ -137,36 +176,49 @@ if authentication_status:
                     genre_movies[genre] = [row['title']]
 
     # Select a genre from the list
-    selected_genre = st.selectbox("Select a genre", list(genre_movies.keys()))
+    selected_genre = st.selectbox("Select a genre", ['All'] + list(genre_movies.keys()))
 
     # Add a button to show the results
     show_results = st.button("Show Movies")
 
+    # ... [Previous code remains the same]
+
     if show_results:
+        if selected_genre == 'All':
+            # Display the most popular movies overall
+            st.header(f"Popular Movies in All Genres")
+            popular_movies_all = movies.dropna(subset=['genres']).sort_values(by='popularity', ascending=False).head(5)
+        else:
+            # Display the most popular movies in the selected genre
+            st.header(f"Popular Movies in {selected_genre}")
+            genre_filter = movies['genres'].fillna('').str.contains(selected_genre)
+            popular_movies_all = movies[genre_filter].sort_values(by='popularity', ascending=False).head(5)
 
-        # Display the most popular movies in the selected genre
-        st.header(f"Popular Movies in {selected_genre}")
-        popular_movies_in_genre = genre_movies.get(selected_genre, [])
+        cols=st.columns(5)
 
-        if popular_movies_in_genre:
-            columns = st.columns(5)
-            
-            for i, movie_name in enumerate(popular_movies_in_genre[:5]):
-                movie = movies[movies['title'] == movie_name].iloc[0]
+        for i, col in enumerate(cols):
+
+            if i < len(popular_movies_all):
+
+                movie = popular_movies_all.iloc[i]  # Access the row of the DataFrame
+
+                movie_name = movie['title']
                 movie_poster = fetch_poster(movie['id'])
+                popularity = movie['popularity']
+                movie_trailer = fetch_trailer(movie['id'])
 
-                with columns[i]:
+
+                with col:    
                     st.markdown(f"**{movie_name}**")
-                    st.image(movie_poster)
+                    st.image(movie_poster, use_column_width=True)
+                    st.markdown(f"**Popularity:** {popularity:.2f}")
+                    # st.markdown(f"**Similarity-score:** {movie_similarity:.5f}")
+                    st.video(movie_trailer)
 
                     with st.expander(f"Movie Description"):
-                        st.markdown("**Tagline:** " + f"{movie['tagline']}")
-                        st.markdown("**Genres:** " + f"{movie['genres']}")
-                        st.markdown("**Overview:** " + f"{movie['overview']}")
-                        st.markdown("**Cast:** " + f"{movie['cast']}")
-                        st.markdown("**Director:** " + f"{movie['director']}")
-        else:
-            st.warning(f"No popular movies found in {selected_genre} genre.")
-
-
-
+                        st.markdown("**Tagline:** "+f"{movie['tagline']}")
+                        st.markdown("**Genres:** "+f"{movie['genres']}")
+                        st.markdown("**Overview:** "+f"{movie['overview']}")
+                        st.markdown("**Cast:** "+f"{movie['cast']}")
+                        st.markdown("**Director:** "+f"{movie['director']}")
+        
